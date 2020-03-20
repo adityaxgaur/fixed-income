@@ -6,6 +6,8 @@ Created on Tue Mar 17 14:57:22 2020
 """
 import math
 import matplotlib.pyplot as plt
+from scipy import optimize,interpolate
+import numpy as np
 
 def price(ytm,ttm,freq,cpn_rate,fv=100. ):
     """
@@ -31,7 +33,6 @@ def price(ytm,ttm,freq,cpn_rate,fv=100. ):
 
     """
     if freq == 0: # zc bond
-        assert ttm > 1.0 # not coding for short dates zc bonds
         return fv/((1+ytm)**ttm)
     
     cpn = cpn_rate/freq*fv
@@ -107,6 +108,58 @@ def convexity(ytm,*args, **kwrgs):
     convexity = (del_up-del_dn)/(2*del_y)
     return convexity*scaling_factor
 
+
+def theta(ytm,ttm,freq,cpn_rate,fv=100. ):
+    p = price(ytm,ttm,freq,cpn_rate,fv)
+    dt = -1/252
+    p_new = price(ytm,ttm+dt,freq,cpn_rate,fv)
+    return p_new-p
+    
+def calc_ytm(price,ttm,freq,cpn, fv=100.):
+    """
+    Yield to maturity is calculated based on below formula
+        P = (c/y) *[1 - 1/(1+y)**n] + 100/(1+y)**n
+
+    Parameters
+    ----------
+    price : price of bond
+    ttm = time to maturity in years
+    freq = freq of payment
+    cpn : coupon per period
+    fv : future value or the final price
+
+    Returns
+    -------
+    yield to maturity
+
+    """
+    price = float(price)
+    ttm = float(ttm)
+    cpn = float(cpn)
+    fv = float(fv)
+    
+    if freq == 0: #zero cpn bond
+        return (fv/price)**(1/ttm) -1
+    
+    cpn = cpn/freq # coupon per period
+    n = ttm*freq # no. of periods
+    
+    def func(y):
+        return price - (cpn/y)*(1 - (1+y)**-n) - fv*(1+y)**-n
+    
+    ytm = optimize.newton(func, 0.01, tol=.0001, maxiter=100)
+    return ytm*freq
+    
+
+def interpolate_ytm(ttm_list, ytm_list, max_tnr=49):
+    interp_ytm = list()
+    interp = interpolate.interp1d(ttm_list, ytm_list, bounds_error=False, fill_value=np.nan)
+
+    for tnr in range(1,max_tnr):
+        value = float(interp(tnr))
+        if not np.isnan(value):
+            interp_ytm.append(value)
+    return interp_ytm
 
 def plot(**kwargs):
     plt.figure(figsize=(12,8))
